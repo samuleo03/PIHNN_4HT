@@ -1,0 +1,7 @@
+lambda=0.00, L2=0.134270
+lambda=0.25, L2=0.115323
+lambda=0.50, L2=0.098090
+lambda=0.75, L2=0.083637
+lambda=1.00, L2=0.073622
+
+BEST lambda=1.00, L2=0.073622 (ref=Exact)

@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from d2l import torch as d2l
 import numpy as np
+import os
 
 #dde.config.set_random_seed(seed)
 np.random.seed(5)
@@ -124,148 +125,177 @@ def get_gru_indices():
     """
     return train_indices.numpy(), test_indices.numpy()
 
-model = GRURegressor(num_inputs, num_hiddens)
-# Definizione della funzione di perdita MSE
-loss_fn = nn.MSELoss()
-# Definizione dell'ottimizzatore Adam
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+if __name__ == "__main__" and os.getenv("RESTORE_ONLY") != "1":
+    model = GRURegressor(num_inputs, num_hiddens)
+    # Definizione della funzione di perdita MSE
+    loss_fn = nn.MSELoss()
+    # Definizione dell'ottimizzatore Adam
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-# Liste per salvare le loss di training e test per ogni epoca
-train_losses = []
-test_losses = []
+    # Liste per salvare le loss di training e test per ogni epoca
+    train_losses = []
+    test_losses = []
 
-# Stampa della loss iniziale a epoca 0
-# Initial evaluation at epoch 0
-# compute train loss at epoch 0
-total_train_loss = 0
-with torch.no_grad():
-    for xb, yb in train_loader:
-        pred = model(xb)
-        loss = loss_fn(pred, yb)
-        total_train_loss += loss.item() * xb.size(0)
-avg_train_loss = total_train_loss / len(train_loader.dataset)
+    # Stampa della loss iniziale a epoca 0
+    # Initial evaluation at epoch 0
+    # compute train loss at epoch 0
+    total_train_loss = 0
+    with torch.no_grad():
+        for xb, yb in train_loader:
+            pred = model(xb)
+            loss = loss_fn(pred, yb)
+            total_train_loss += loss.item() * xb.size(0)
+    avg_train_loss = total_train_loss / len(train_loader.dataset)
 
-# compute test loss at epoch 0
-total_test_loss = 0
-with torch.no_grad():
-    for xb, yb in test_loader:
-        pred = model(xb)
-        loss = loss_fn(pred, yb)
-        total_test_loss += loss.item() * xb.size(0)
-avg_test_loss = total_test_loss / len(test_loader.dataset)
-
-print(f"Epoch 0/{num_epochs}, Train Loss: {avg_train_loss:.6f}, Test Loss: {avg_test_loss:.6f}")
-
-for epoch in range(num_epochs):
-    # Inizio fase di training per l'epoca corrente
-    model.train()
-    total_loss = 0
-    for xb, yb in train_loader:
-        pred = model(xb)
-        loss = loss_fn(pred, yb)
-        # Backpropagation dell'errore
-        optimizer.zero_grad()
-        loss.backward()
-        # Aggiorna i pesi del modello
-        optimizer.step()
-        total_loss += loss.item() * xb.size(0)
-    avg_train_loss = total_loss / len(train_loader.dataset)
-    train_losses.append(avg_train_loss)
-
-    # Valutazione
-    # Modalità valutazione: disabilita dropout e autograd
-    model.eval()
-    total_loss = 0
+    # compute test loss at epoch 0
+    total_test_loss = 0
     with torch.no_grad():
         for xb, yb in test_loader:
             pred = model(xb)
             loss = loss_fn(pred, yb)
+            total_test_loss += loss.item() * xb.size(0)
+    avg_test_loss = total_test_loss / len(test_loader.dataset)
+
+    print(f"Epoch 0/{num_epochs}, Train Loss: {avg_train_loss:.6f}, Test Loss: {avg_test_loss:.6f}")
+
+    for epoch in range(num_epochs):
+        # Inizio fase di training per l'epoca corrente
+        model.train()
+        total_loss = 0
+        for xb, yb in train_loader:
+            pred = model(xb)
+            loss = loss_fn(pred, yb)
+            # Backpropagation dell'errore
+            optimizer.zero_grad()
+            loss.backward()
+            # Aggiorna i pesi del modello
+            optimizer.step()
             total_loss += loss.item() * xb.size(0)
-    avg_test_loss = total_loss / len(test_loader.dataset)
-    test_losses.append(avg_test_loss)
+        avg_train_loss = total_loss / len(train_loader.dataset)
+        train_losses.append(avg_train_loss)
 
-    print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_train_loss:.6f}, Test Loss: {avg_test_loss:.6f}")
+        # Valutazione
+        # Modalità valutazione: disabilita dropout e autograd
+        model.eval()
+        total_loss = 0
+        with torch.no_grad():
+            for xb, yb in test_loader:
+                pred = model(xb)
+                loss = loss_fn(pred, yb)
+                total_loss += loss.item() * xb.size(0)
+        avg_test_loss = total_loss / len(test_loader.dataset)
+        test_losses.append(avg_test_loss)
 
-# === PLOT DELLE LOSS ===
-# Impostazione di una nuova figura per visualizzare l'andamento della loss nel tempo
-plt.figure(figsize=(12, 6))
-# Crea una figura di dimensioni 12x6 pollici
-epochs = range(1, num_epochs + 1)
-# Definisce le epoche sull'asse x
-plt.plot(epochs, train_losses, label='Training Loss', marker='o', markersize=4)
-# Disegna la curva della loss di training con marker circolari
-plt.plot(epochs, test_losses, label='Test Loss', marker='s', markersize=4)
-# Disegna la curva della loss di test con marker quadrati
-plt.xlabel('Epoche')
-# Etichetta l'asse x
-plt.ylabel('Loss (MSE)')
-# Etichetta l'asse y
-plt.title('Evoluzione della Loss durante il training e il test')
-# Aggiunge un titolo al grafico
-plt.legend()
-# Mostra la legenda delle curve
-plt.yscale('log')  # Scala logaritmica per visualizzare meglio le variazioni
-# Imposta scala logaritmica sull'asse y per evidenziare le variazioni
-plt.grid(True, which="both", ls="--", linewidth=0.5)
-# Aggiunge una griglia leggera al grafico
-plt.tight_layout()
-# Ottimizza il layout per evitare sovrapposizioni
-plt.show(block=False)
-# Visualizza il grafico delle loss senza bloccare l'esecuzione
-plt.pause(0.1)
-# Breve pausa per permettere il rendering della finestra
-# Visualizzazione della soluzione esatta, predetta e loro differenza
+        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {avg_train_loss:.6f}, Test Loss: {avg_test_loss:.6f}")
+
+    # === PLOT DELLE LOSS ===
+    # Impostazione di una nuova figura per visualizzare l'andamento della loss nel tempo
+    plt.figure(figsize=(12, 6))
+    # Crea una figura di dimensioni 12x6 pollici
+    epochs = range(1, num_epochs + 1)
+    # Definisce le epoche sull'asse x
+    plt.plot(epochs, train_losses, label='Training Loss', marker='o', markersize=4)
+    # Disegna la curva della loss di training con marker circolari
+    plt.plot(epochs, test_losses, label='Test Loss', marker='s', markersize=4)
+    # Disegna la curva della loss di test con marker quadrati
+    plt.xlabel('Epoche')
+    # Etichetta l'asse x
+    plt.ylabel('Loss (MSE)')
+    # Etichetta l'asse y
+    plt.title('Evoluzione della Loss durante il training e il test')
+    # Aggiunge un titolo al grafico
+    plt.legend()
+    # Mostra la legenda delle curve
+    plt.yscale('log')  # Scala logaritmica per visualizzare meglio le variazioni
+    # Imposta scala logaritmica sull'asse y per evidenziare le variazioni
+    plt.grid(True, which="both", ls="--", linewidth=0.5)
+    # Aggiunge una griglia leggera al grafico
+    plt.tight_layout()
+    # Ottimizza il layout per evitare sovrapposizioni
+    plt.show(block=False)
+    # Visualizza il grafico delle loss senza bloccare l'esecuzione
+    plt.pause(0.1)
+    # Breve pausa per permettere il rendering della finestra
+    # Visualizzazione della soluzione esatta, predetta e loro differenza
 
 
-# === PLOT DELLE SOLUZIONI SULLA GRIGLIA ===
-# Ricarica i dati per ricostruire la griglia spazio-temporale
-data = np.load("heat_eq_damp_A05.npz")
-# Estrai t e x
-t = data["t"].flatten()
-x = data["x"].flatten()
-# Ricrea la griglia 2D e i punti per la predizione
-xx, tt = np.meshgrid(x, t)
-grid = np.vstack((xx.ravel(), tt.ravel())).T
-grid_tensor = torch.tensor(grid, dtype=torch.float32)
-# Calcola le predizioni su tutta la griglia
-model.eval()
-with torch.no_grad():
-    preds = model(grid_tensor).numpy().reshape(len(t), len(x))
-# Soluzione esatta (transposta come in gen_testdata)
-exact = data["usol"].T
-diff = np.abs(exact - preds) #DA CALCOLARE LA NORMA
-l2_gru=np.linalg.norm(diff)
-print(l2_gru)
+    # === PLOT DELLE SOLUZIONI SULLA GRIGLIA ===
+    # Ricarica i dati per ricostruire la griglia spazio-temporale
+    data = np.load("heat_eq_damp_A05.npz")
+    # Estrai t e x
+    t = data["t"].flatten()
+    x = data["x"].flatten()
+    # Ricrea la griglia 2D e i punti per la predizione
+    xx, tt = np.meshgrid(x, t)
+    grid = np.vstack((xx.ravel(), tt.ravel())).T
+    grid_tensor = torch.tensor(grid, dtype=torch.float32)
+    # Calcola le predizioni su tutta la griglia
+    model.eval()
+    with torch.no_grad():
+        preds = model(grid_tensor).numpy().reshape(len(t), len(x))
+    # Soluzione esatta (transposta come in gen_testdata)
+    exact = data["usol"].T
+    # Calcolo della differenza punto-punto (errore signed, non assoluto)
+    diff = exact - preds  # errore punto-punto
+    # Calcolo dell'L2 error:
+    # 1. Norma L2 per ogni punto spaziale (cioè colonna, nel tempo)
+    # 2. Norma L2 finale sui punti spaziali
+    l2_per_spazio = np.linalg.norm(diff, axis=0)
+    l2_gru = np.linalg.norm(l2_per_spazio)
+    print(l2_gru)
+    # === SALVA I RISULTATI SU FILE .npz ===
+    import os
+    # Ottieni la directory dello script corrente
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    risultati_dir = os.path.join(script_dir, "risultati")
+    os.makedirs(risultati_dir, exist_ok=True)
+    save_path = os.path.join(risultati_dir, "gru_preds_heat.npz")
+    np.savez(save_path,
+             x=x,
+             t=t,
+             exact=exact,
+             preds=preds,
+             diff=diff,
+             l2_gru=l2_gru)
+    print(f"Risultati GRU salvati in: {save_path}")
+    # Per il grafico della differenza, usa la differenza assoluta (non modificare)
+    diff = np.abs(exact - preds)
 
-# Plot a 3 pannelli: esatta, predetta e differenza
-# Crea una figura con 3 pannelli affiancati per confronto
-fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-# Pannello 1: mappa di calore della soluzione esatta
-im0 = axes[0].imshow(exact, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
-axes[0].set_title("Temperatura esatta")
-axes[0].set_xlabel("Spazio x")
-axes[0].set_ylabel("Tempo t")
-fig.colorbar(im0, ax=axes[0])
-# Pannello 2: mappa di calore della soluzione predetta dal modello
-im1 = axes[1].imshow(preds, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
-axes[1].set_title("Temperatura predetta dalla GRU")
-axes[1].set_xlabel("Spazio x")
-axes[1].set_ylabel("Tempo t")
-fig.colorbar(im1, ax=axes[1])
-# Pannello 3: mappa di calore della differenza assoluta tra esatto e predetto
-im2 = axes[2].imshow(diff, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
-axes[2].set_title("Differenza di temperatura")
-axes[2].set_xlabel("Spazio x")
-axes[2].set_ylabel("Tempo t")
-fig.colorbar(im2, ax=axes[2])
-plt.tight_layout()
-# Ottimizza il layout dei 3 pannelli
-plt.show(block=False)
-# Visualizza il grafico a tre pannelli senza bloccare
-plt.pause(0.1)
-# Breve pausa per permettere il rendering dei pannelli
-input("Premi Invio per chiudere i grafici...")
-# Attende un input per mantenere aperte le finestre finché si desidera
+    # # Calcolo della differenza assoluta punto-punto
+    # diff = np.abs(exact - preds)
+    # l2_gru = np.linalg.norm(diff)
+    # print(l2_gru)
 
-# === SALVA I PESI DEL MODELLO GRU TRAINATO ===
-torch.save(model.state_dict(), "gru_trained.pth")
+    # Plot a 3 pannelli: esatta, predetta e differenza
+    # Crea una figura con 3 pannelli affiancati per confronto
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    # Pannello 1: mappa di calore della soluzione esatta
+    im0 = axes[0].imshow(exact, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
+    axes[0].set_title("Temperatura esatta")
+    axes[0].set_xlabel("Spazio x")
+    axes[0].set_ylabel("Tempo t")
+    fig.colorbar(im0, ax=axes[0])
+    # Pannello 2: mappa di calore della soluzione predetta dal modello
+    im1 = axes[1].imshow(preds, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
+    axes[1].set_title("Temperatura predetta dalla GRU")
+    axes[1].set_xlabel("Spazio x")
+    axes[1].set_ylabel("Tempo t")
+    fig.colorbar(im1, ax=axes[1])
+    # Pannello 3: mappa di calore della differenza assoluta tra esatto e predetto
+    im2 = axes[2].imshow(diff, extent=[x.min(), x.max(), t.min(), t.max()], aspect='auto', origin='lower')
+    axes[2].set_title("Differenza di temperatura")
+    axes[2].set_xlabel("Spazio x")
+    axes[2].set_ylabel("Tempo t")
+    fig.colorbar(im2, ax=axes[2])
+    plt.tight_layout()
+    # Ottimizza il layout dei 3 pannelli
+    plt.show(block=False)
+    # Visualizza il grafico a tre pannelli senza bloccare
+    plt.pause(0.1)
+    # Breve pausa per permettere il rendering dei pannelli
+    input("Premi Invio per chiudere i grafici...")
+    # Attende un input per mantenere aperte le finestre finché si desidera
+
+    # === SALVA I PESI DEL MODELLO GRU TRAINATO ===
+    os.makedirs("./tesi/models", exist_ok=True)
+    torch.save(model.state_dict(), "./tesi/models/gru_trained.pth")
