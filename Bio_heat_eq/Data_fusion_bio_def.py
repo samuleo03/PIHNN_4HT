@@ -278,7 +278,28 @@ if __name__ == "__main__":
         for v, c in zip(vals, counts):
             print(f"    λ={v:.2f}  ->  {c} celle")
 
-        # (Per-column mode summary removed)
+        # 3) Moda globale dei λ
+        try:
+            vals_all, counts_all = np.unique(lam_map_best, return_counts=True)
+            idx_all = np.argmax(counts_all)
+            moda_glob = float(vals_all[idx_all])
+            frac_all = counts_all[idx_all] / lam_map_best.size
+            print(f"  Moda globale: λ={moda_glob:.2f} ({counts_all[idx_all]}/{lam_map_best.size}, {frac_all*100:.1f}%)")
+        except Exception as e:
+            print(f"  [WARN] moda globale non disponibile: {e}")
+
+        # 4) Mode per colonna (prime COL_MODES_SHOW)
+        try:
+            nx = lam_map_best.shape[1]
+            print(f"  Mode per colonna (prime {min(COL_MODES_SHOW, nx)}):")
+            for j in range(min(COL_MODES_SHOW, nx)):
+                vals_j, counts_j = np.unique(lam_map_best[:, j], return_counts=True)
+                idx = np.argmax(counts_j)
+                mode_j = float(vals_j[idx])
+                frac_j = counts_j[idx] / lam_map_best.shape[0]
+                print(f"    col{j:02d}: λ={mode_j:.2f} ({frac_j*100:.1f}%)")
+        except Exception as e:
+            print(f"  [WARN] per-column summary non disponibile: {e}")
 
         # 4) Mappa completa (opzionale, molto lunga)
         if SHOW_LAMBDA_MAP_FULL:
