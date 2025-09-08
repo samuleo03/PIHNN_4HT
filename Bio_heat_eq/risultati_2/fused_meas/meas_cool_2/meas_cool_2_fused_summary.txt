@@ -1,3 +1,4 @@
 BEST random-per-pixel fusion
-L2=0.101144, trial=50, ref=Exact
-λ distribution (best):  0.0: #### 1839 | 0.25: #### 1884 |  0.5: #### 1900 | 0.75: #### 1858 |  1.0: #### 1969
+L2=0.089034, trial=76, ref=Exact
+λ distribution (best):  0.0: #### 395 | 0.25: #### 321 |  0.5: #### 340 | 0.75: #### 399 |  1.0: #### 345
+x labels: y2, gt2, gt1, y1
