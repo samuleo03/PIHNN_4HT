@@ -57,6 +57,32 @@ def _labels_for_positions(xs: np.ndarray, tol: float = 2e-3):
 
     return None
 
+# Helper per determinare i valori fisici da mostrare nelle etichette quando l'asse x è normalizzato
+def _physical_positions_for_four(xs: np.ndarray, tol: float = 2e-3) -> np.ndarray:
+    """
+    Restituisce i valori fisici da visualizzare sotto le colonne.
+    Se xs corrisponde a [0, 0.01, 0.04, 0.07] (metri), li restituisce così.
+    Se xs corrisponde alla versione normalizzata [0, 1/7, 4/7, 1], restituisce [0, 0.01, 0.04, 0.07].
+    Altrimenti ritorna xs così com'è.
+    """
+    xs = np.asarray(xs, dtype=float)
+    if xs.shape[0] != 4:
+        return xs
+    targets_m = np.array([0.00, 0.01, 0.04, 0.07], dtype=float)
+    targets_n = np.array([0.0, 1.0/7.0, 4.0/7.0, 1.0], dtype=float)
+    if np.allclose(xs, targets_m, atol=tol, rtol=0):
+        return targets_m
+    if np.allclose(xs, targets_n, atol=tol, rtol=0):
+        return targets_m
+    # Prova anche il caso in cui xs è una versione scalata (0..1) ma non esattamente i razionali
+    xmin, xmax = float(xs.min()), float(xs.max())
+    rng = xmax - xmin
+    if rng > 0:
+        xs_aff = (xs - xmin) / rng
+        if np.allclose(xs_aff, targets_n, atol=5e-3, rtol=0):
+            return targets_m
+    return xs
+
 # Risolutore robusto del path al file GRU npz (con fallback a scansione)
 def _resolve_gru_npz(base_dir: Path) -> Path:
     required_keys = {"x1", "t1", "preds1", "x2", "t2", "preds2"}
@@ -128,9 +154,30 @@ PRINT_ONLY_ON_IMPROVEMENT = True  # stampa i trial solo quando migliora il best 
 SHOW_LAMBDA_MAP_FULL = False      # stampa o meno l'intera mappa λ
 COL_MODES_SHOW = 10               # quante colonne mostrare nel riepilogo per-colonna
 
+# Configurazione plotting categoriale per x (colonne uguali) e parametri etichette
+PLOT_CATEGORICAL_X = True  # disegna colonne a larghezza uniforme (0..3) solo per la figura
+XLABEL_FONTSIZE = 9        # dimensione font per etichette a due righe
+XLABEL_PAD = 8             # distanza etichette dall'asse x
+
 # ======================
 # Utility
 # ======================
+
+def _compute_edges(vals: np.ndarray) -> np.ndarray:
+    """Dato un array monodimensionale di centri (monotono), restituisce gli spigoli per pcolormesh/imshow."""
+    v = np.asarray(vals, dtype=float)
+    if v.ndim != 1 or v.size == 0:
+        raise ValueError("vals deve essere un vettore 1D non vuoto")
+    if v.size == 1:
+        d = 1.0
+        return np.array([v[0] - d/2, v[0] + d/2], dtype=float)
+    diffs = np.diff(v)
+    edges = np.empty(v.size + 1, dtype=float)
+    edges[1:-1] = (v[1:] + v[:-1]) * 0.5
+    edges[0] = v[0] - diffs[0] * 0.5
+    edges[-1] = v[-1] + diffs[-1] * 0.5
+    return edges
+
 def load_triplets_txt(path: str):
     arr = np.loadtxt(path)
     if arr.ndim != 2 or arr.shape[1] != 3:
@@ -448,45 +495,60 @@ if __name__ == "__main__":
                        fmt="%.6f", header="x t U_fused (best random λ per-pixel)")
 
         # Figura unica del caso migliore (PINN, GRU, Fused-best, |ref-Fused|)
+        # Edges e ticks: possibilità di disegno categoriale (colonne uguali) per allineare visivamente label + numeri
+        x_edges = _compute_edges(xs_tar)
+        t_edges = _compute_edges(ts_tar)
+        if PLOT_CATEGORICAL_X:
+            x_plot_edges = np.arange(len(xs_tar) + 1, dtype=float)   # 0..4
+            x_ticks_plot = np.arange(len(xs_tar), dtype=float)        # 0..3
+        else:
+            x_plot_edges = x_edges
+            x_ticks_plot = xs_tar
         max_abs = np.max(np.abs(T_ref_tar - U_best))
         fig, axes = plt.subplots(1, 4, figsize=(22, 5))
-        im0 = axes[0].imshow(T_pinn_tar, origin='lower', extent=[xs_tar.min(), xs_tar.max(), ts_tar.min(), ts_tar.max()],
-                             aspect='auto', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
+        im0 = axes[0].pcolormesh(x_plot_edges, t_edges, T_pinn_tar, shading='flat', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
         axes[0].set_title(f'PINN ({dataset_label})'); plt.colorbar(im0, ax=axes[0], label='T')
         if x_labels is not None:
-            axes[0].set_xticks(xs_tar)
-            axes[0].set_xticklabels(x_labels)
-        im1 = axes[1].imshow(T_gru_tar, origin='lower', extent=[xs_tar.min(), xs_tar.max(), ts_tar.min(), ts_tar.max()],
-                             aspect='auto', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
+            xvals_disp = _physical_positions_for_four(xs_tar)
+            tick_labels = [f"{lbl}\n({xv:.3f})" for lbl, xv in zip(x_labels, xvals_disp)]
+            axes[0].set_xticks(x_ticks_plot)
+            axes[0].set_xticklabels(tick_labels, fontsize=XLABEL_FONTSIZE)
+        im1 = axes[1].pcolormesh(x_plot_edges, t_edges, T_gru_tar, shading='flat', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
         axes[1].set_title(f'GRU ({dataset_label})'); plt.colorbar(im1, ax=axes[1], label='T')
         if x_labels is not None:
-            axes[1].set_xticks(xs_tar)
-            axes[1].set_xticklabels(x_labels)
-        im2 = axes[2].imshow(U_best, origin='lower', extent=[xs_tar.min(), xs_tar.max(), ts_tar.min(), ts_tar.max()],
-                             aspect='auto', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
+            axes[1].set_xticks(x_ticks_plot)
+            axes[1].set_xticklabels(tick_labels, fontsize=XLABEL_FONTSIZE)
+        im2 = axes[2].pcolormesh(x_plot_edges, t_edges, U_best, shading='flat', cmap='viridis', vmin=vmin_T, vmax=vmax_T)
         axes[2].set_title(f'Fused BEST (random λ) — {dataset_label}\nL2={best["l2"]:.6f} (best found at trial {best["trial"]})'); plt.colorbar(im2, ax=axes[2], label='T')
         if x_labels is not None:
-            axes[2].set_xticks(xs_tar)
-            axes[2].set_xticklabels(x_labels)
-        im3 = axes[3].imshow(np.abs(T_ref_tar - U_best), origin='lower', extent=[xs_tar.min(), xs_tar.max(), ts_tar.min(), ts_tar.max()],
-                             aspect='auto', cmap='viridis', vmin=0, vmax=max_abs)
+            axes[2].set_xticks(x_ticks_plot)
+            axes[2].set_xticklabels(tick_labels, fontsize=XLABEL_FONTSIZE)
+        im3 = axes[3].pcolormesh(x_plot_edges, t_edges, np.abs(T_ref_tar - U_best), shading='flat', cmap='viridis', vmin=0, vmax=max_abs)
         axes[3].set_title(f'|{ref_name} - Fused BEST| ({dataset_label})'); plt.colorbar(im3, ax=axes[3], label='|Δ|')
         if x_labels is not None:
-            axes[3].set_xticks(xs_tar)
-            axes[3].set_xticklabels(x_labels)
+            axes[3].set_xticks(x_ticks_plot)
+            axes[3].set_xticklabels(tick_labels, fontsize=XLABEL_FONTSIZE)
+        # centratura e padding per evitare sovrapposizione delle due righe
+        for ax in axes:
+            ax.set_xlim(x_plot_edges[0], x_plot_edges[-1])
+            ax.tick_params(axis='x', pad=XLABEL_PAD)
+        plt.subplots_adjust(bottom=0.22)
         plt.tight_layout()
         fig.savefig(out_dir / f"{key}_fused_best_random.png", dpi=200)
 
         # (Opzionale) salva la mappa di λ come immagine discreta, ma NON mostrarla
         try:
             fig_l, ax_l = plt.subplots(1, 1, figsize=(6, 4))
-            m = ax_l.imshow(lam_map_best, origin='lower', extent=[xs_tar.min(), xs_tar.max(), ts_tar.min(), ts_tar.max()],
-                            aspect='auto', cmap='viridis')
+            m = ax_l.pcolormesh(x_plot_edges, t_edges, lam_map_best, shading='flat', cmap='viridis')
             ax_l.set_title(f'λ-map (best) — {dataset_label}')
             plt.colorbar(m, ax=ax_l, label='λ')
             if x_labels is not None:
-                ax_l.set_xticks(xs_tar)
-                ax_l.set_xticklabels(x_labels)
+                xvals_disp = _physical_positions_for_four(xs_tar)
+                tick_labels = [f"{lbl}\n({xv:.3f})" for lbl, xv in zip(x_labels, xvals_disp)]
+                ax_l.set_xticks(x_ticks_plot)
+                ax_l.set_xticklabels(tick_labels, fontsize=XLABEL_FONTSIZE)
+                ax_l.set_xlim(x_plot_edges[0], x_plot_edges[-1])
+                ax_l.tick_params(axis='x', pad=XLABEL_PAD)
             fig_l.savefig(out_dir / f"{key}_lambda_map_best.png", dpi=200)
             plt.close(fig_l)
         except Exception as e:
